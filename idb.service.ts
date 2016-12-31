@@ -325,21 +325,22 @@ export class IDBService {
 		const transPromise = this.getTransaction(stores, "readwrite");
 		const retPromise   = transPromise.then(trans => {
 
-			// getByIndex
-			const req = trans.objectStore(store).get(params.index);
+			// wait for the transaction to complete
+
+			// firstly, we're deleting the record from the database
+			// because the index is going to be altered as well...
+			const req = trans.objectStore(store).delete(params.index);
 
 			/* inner promise */
 			return new Promise((resolve, reject) => {
 				req.onsuccess = (evt) => {
-					const object = (<IDBRequest>evt.target).result;
-					/* update the record */
-					object[params.name] = params.value;
-
-					const req2 = trans.objectStore(store).put(object);
-
-					trans.onerror = (errEvt) => { reject(errEvt); };
-					trans.oncomplete = (evt) => { resolve(); };
+					trans.objectStore(store)
+						.add(params.value)
+						.onsuccess = (evt2) => { console.log("Done!") };
 				};
+
+				trans.oncomplete = () => { resolve(); }
+				trans.onerror = (evt) => { reject(evt) };
 			});
 		});
 

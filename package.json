@@ -1,5 +1,5 @@
 {
-  "name": "kmdIndexedDB",
+  "name": "idbServiced",
   "version": "1.0.0",
   "description": "Angular2 Service for Accessing indexedDB",
   "scripts": {
