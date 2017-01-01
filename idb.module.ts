@@ -1,7 +1,7 @@
 import { ModuleWithProviders, NgModule } from '@angular/core';
 import { IDBService
 	   , IDBServiceConfig
-	   , IDB_DI_CONFIG                } from './idb.service';
+	   , IDB_DI_CONFIG                 } from './idb.service';
 
 @NgModule({})
 export class IDBModule {
