@@ -25,6 +25,17 @@ If everything goes ok, then you are ready to take off.
 
 To configure it, first do an `import {IDBModule, IDBServiceConfig} from 'kmd-idb'` in your root module. The module accepts a number of [options]().
 
+Also, we need to instruct System JS where it should look for the module by adding the following in your `systemjs.config.js` file
+
+```js
+System.config({
+  defaultJSExtension: 'true',
+  map: {
+    'kmd-idb': 'npm:kmd-idb/index'
+  }
+});
+```
+
 ```js
 // Typing isn't real necessary but is needed here for brevity.
 // IDE reminds us of the compulsory config options should we forget them,
