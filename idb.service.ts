@@ -312,7 +312,7 @@ export class IDBService {
 	 * @return {Promise<T>} a promise that may eventually resolve with edited `<T>` item record 
 	 *	or fail with an error upon completion.
 	 */
-	replaceObjectByKey<T>(store: string, key: string|number|Date|IDBKeyRange, value: T): Promise<any> {
+	replaceObjectByKey<T>(store: string, key: string|number|Date|IDBKeyRange, value: T): Promise<T> {
 		
 		if (_.isUndefined(key)) {
 			return Promise.reject(Error("updateByIndex() needs a key value!"));
@@ -321,23 +321,22 @@ export class IDBService {
 		const transPromise = this.getTransaction(store, "readwrite");
 		const retPromise   = transPromise.then(trans => {
 
-			// wait for the transaction to complete
-
-			// firstly, we're deleting the record from the database
-			// because the key is going to be altered as well...
-			const req = trans.objectStore(store).delete(key);
-
 			/* inner promise */
 			return new Promise((resolve, reject) => {
+				// wait for the transaction to complete
+				trans.oncomplete = () => { resolve(value); }
+				trans.onerror = (evt) => { reject(evt) };
+
+				// firstly, we're deleting the record from the database
+				// because the key is going to be altered as well...
+				const req = trans.objectStore(store).delete(key);
+
 				req.onsuccess = (evt) => {
 					trans.objectStore(store)
 						.add(value)
 						.onsuccess = (evt2) => { console.log("Done!") };
 				};
-
-				trans.oncomplete = () => { resolve(); }
-				trans.onerror = (evt) => { reject(evt) };
-			});
+			}) as Promise<T>;
 		});
 
 		return retPromise;
