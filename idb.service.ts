@@ -325,16 +325,15 @@ export class IDBService {
 			return new Promise((resolve, reject) => {
 				// wait for the transaction to complete
 				trans.oncomplete = () => { resolve(value); }
-				trans.onerror = (evt) => { reject(evt) };
+				trans.onerror = (evt) => { reject(evt.error) };
 
 				// firstly, we're deleting the record from the database
 				// because the key is going to be altered as well...
-				const req = trans.objectStore(store).delete(key);
-
-				req.onsuccess = (evt) => {
-					trans.objectStore(store)
-						.add(value)
-						.onsuccess = (evt2) => { console.log("Done!") };
+				trans.objectStore(store).delete(key)
+					.onsuccess = (evt) => {
+						trans.objectStore(store)
+							.add(value, key)
+							.onsuccess = (evt2) => {/*stub*/};
 				};
 			}) as Promise<T>;
 		});
@@ -398,8 +397,8 @@ export class IDBService {
 					};
 				} else {
 					objectStore.get(index).onsuccess = (evt) => {
-						const cursor: IDBCursorWithValue = (<IDBRequest>evt.target).result;
-						updateOne(cursor.value as T).then(value => resolve([value]));
+						const oldValue: T = (<IDBRequest>evt.target).result;
+						updateOne(oldValue).then(newValue => resolve([newValue]));
 					};
 				}
 
