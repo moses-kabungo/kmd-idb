@@ -1,5 +1,5 @@
 {
-  "name": "idbServiced",
+  "name": "kmd-idb",
   "version": "1.0.0",
   "description": "Angular2 Service for Accessing indexedDB",
   "scripts": {
@@ -10,6 +10,7 @@
     "tsc:w": "tsc -w"
   },
   "keywords": [
+    "Angular",
     "Angular2",
     "indexedDB",
     "Service"
