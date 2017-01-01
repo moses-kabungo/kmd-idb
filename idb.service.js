@@ -219,18 +219,19 @@ var IDBService = (function () {
         }
         var transPromise = this.getTransaction(stores, "readwrite");
         var retPromise = transPromise.then(function (trans) {
-            // getByIndex
-            var req = trans.objectStore(store).get(params.index);
+            // wait for the transaction to complete
+            // firstly, we're deleting the record from the database
+            // because the index is going to be altered as well...
+            var req = trans.objectStore(store).delete(params.index);
             /* inner promise */
             return new Promise(function (resolve, reject) {
                 req.onsuccess = function (evt) {
-                    var object = evt.target.result;
-                    /* update the record */
-                    object[params.name] = params.value;
-                    var req2 = trans.objectStore(store).put(object);
-                    trans.onerror = function (errEvt) { reject(errEvt); };
-                    trans.oncomplete = function (evt) { resolve(); };
+                    trans.objectStore(store)
+                        .add(params.value)
+                        .onsuccess = function (evt2) { console.log("Done!"); };
                 };
+                trans.oncomplete = function () { resolve(); };
+                trans.onerror = function (evt) { reject(evt); };
             });
         });
         return retPromise;
