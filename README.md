@@ -25,7 +25,7 @@ If everything goes ok, then you are ready to take off.
 
 To configure it, first do an `import {IDBModule, IDBServiceConfig} from 'kmd-idb'` in your root module. The module accepts a number of [options]().
 
-```javascript
+```js
 // Typing isn't real necessary but is needed here for brevity.
 // IDE reminds us of the compulsory config options should we forget them,
 // and explain them through JSDoc as we type. Thanks to TypeScript!
@@ -78,7 +78,7 @@ As with many angular services, you might need to consider if you need a singleto
 
 Fistly, import the service whenever you need to use it as
 
-```javascript
+```js
 import {IDBService} from 'kmd-idb';
 ```
 
@@ -86,7 +86,7 @@ import {IDBService} from 'kmd-idb';
 
 To inject a singleton service, go to the root module of your application and register the service in the `providers` array. i.e
 
-```javascript
+```js
 @NgModule({
     providers: [IDBService]
 }) export class YourRootModuleClass {}
@@ -96,7 +96,7 @@ To inject a singleton service, go to the root module of your application and reg
 
 If you decide you need to use the `IDBService` per application component, then register it in the `providers` array of the corresponding component. i.e
 
-```javascript
+```js
 @Component({
     providers: [IDBService]
 }) export class YourComponent {}
@@ -106,7 +106,7 @@ If you decide you need to use the `IDBService` per application component, then r
 
 Say you need to fetch objects from the store named `customers`. The API returns the `Promise` of `Customer` objects through the `IDBService.getAll()`
 
-```javascript
+```js
 
 // ...
 
