@@ -23,7 +23,7 @@ If everything goes ok, then you are ready to take off.
 
 ### Configuring the module
 
-To configure it, first do an `import {IDBModule, IDBServiceConfig} from 'kmd-idb'` in your root module. The module accepts a number of [options]().
+To configure it, first do an `import {IDBModule, IDBServiceConfig} from 'kmd-idb'` in your root module. The module accepts a number of [options](#module-configuration-options).
 
 ```js
 // Typing isn't real necessary but is needed here for brevity.
@@ -115,7 +115,7 @@ If you decide you need to use the `IDBService` per application component, then r
 
 ### Example, Fetching Records. `IDBService.getObjects()`
 
-Say you need to fetch objects from the store named `customers`. The API returns the `Promise` of `Customer` objects through the `IDBService.getAll()`
+Say you need to fetch objects from the store named `customers`. The API returns the `Promise` of `Customer` objects through the `IDBService.getObjects()`
 
 ```js
 
