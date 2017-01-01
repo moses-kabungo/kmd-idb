@@ -155,7 +155,7 @@ export class IDBService {
 	 * @param op {(any) => T} optional casting operator
 	 * @return {Promise<T>} a promise of result from the database.
 	 */
-	getByKey<T>(stores: string | Array<string>, store: string, params: GetParams<T>): Promise<T> {
+	getObjectByKey<T>(stores: string | Array<string>, store: string, params: GetParams<T>): Promise<T> {
 		
 		if (_.isUndefined( params.values )) {
 			return Promise.reject(
@@ -181,7 +181,7 @@ export class IDBService {
 	 * @param params {GetParams} optional parameters supplied to the query
 	 * @return {Promise<Array<T>>}
 	 */
-	getAll<T>(stores: string|Array<string>, 
+	getObjects<T>(stores: string|Array<string>, 
 		store: string, params?: GetParams<T> ): Promise<Array<T>> {
 
 		const fn = (params && params.castOp) || cast;
@@ -215,7 +215,7 @@ export class IDBService {
 	 * 	you may need to define `index` and `values` parameters.
 	 * @return {Promise<T>} a promise of `T` object item from the database. 
 	 */
-	getOneByIndex<T>(stores: string|Array<string>,
+	getObjectByIndex<T>(stores: string|Array<string>,
 		store: string, params: GetParams<T>): Promise<T> {
 
 		if (_.isUndefined(params.index)) {
@@ -251,7 +251,7 @@ export class IDBService {
 	 * need to define `index` parameter.
 	 * @return {Promise<Array<T>>} a promise of  an array of`<T>` object items from the database.
 	 */
-	getAllByIndex<T>(stores: string|Array<string>,
+	getObjectsByIndex<T>(stores: string|Array<string>,
 		store: string, params: GetParams<T>): Promise<Array<T>> {
 
 		if (_.isEmpty(params.index)) {
@@ -287,7 +287,7 @@ export class IDBService {
 	 * @param keyRage {IDBKeyRange} the key constraint of the object in the store we need to delete.
 	 * @return {Promise<any>} a promise that may enventually resolve or fail upon completion.
 	 */
-	removeByKey(stores: string|Array<string>,
+	removeObjectByKey(stores: string|Array<string>,
 			store: string, keyRange: IDBKeyRange
 	): Promise<any> {
 		return this.getTransaction(stores, 'readwrite').then(trans => {
@@ -304,38 +304,34 @@ export class IDBService {
 	}
 
 	/**
-	 * @description updates an item from the database.
-	 * @param stores {string|Array<string>} the store object(s) of which our search operation will span.
+	 * @description Find and replaces a value in the store.
+	 * 	If you certainly does not need to replace the object, You should instead 
+	 *	use {@link #updateObjectByIndex}
 	 * @param store {string} name of the object store we need to particulary search from
 	 * @param params {PutParams} important parameters needed in order to edit the object
 	 * @return {Promise<T>} a promise that may eventually resolve with edited `<T>` item record 
 	 *	or fail with an error upon completion.
 	 */
-	updateByIndex<T>(stores: string|Array<string>, store: string, params: PutParams<T>): Promise<any> {
+	replaceObjectByKey<T>(store: string, key: string|number|Date|IDBKeyRange, value: T): Promise<any> {
 		
-		if (_.isUndefined(params.index)) {
-			return Promise.reject(Error("updateByIndex() needs an index!"));
+		if (_.isUndefined(key)) {
+			return Promise.reject(Error("updateByIndex() needs a key value!"));
 		}
 
-		if (_.isUndefined(params.name)) {
-			return Promise.reject(Error("updateByIndex() needs name of the object\'s property!"));
-		}
-
-
-		const transPromise = this.getTransaction(stores, "readwrite");
+		const transPromise = this.getTransaction(store, "readwrite");
 		const retPromise   = transPromise.then(trans => {
 
 			// wait for the transaction to complete
 
 			// firstly, we're deleting the record from the database
-			// because the index is going to be altered as well...
-			const req = trans.objectStore(store).delete(params.index);
+			// because the key is going to be altered as well...
+			const req = trans.objectStore(store).delete(key);
 
 			/* inner promise */
 			return new Promise((resolve, reject) => {
 				req.onsuccess = (evt) => {
 					trans.objectStore(store)
-						.add(params.value)
+						.add(value)
 						.onsuccess = (evt2) => { console.log("Done!") };
 				};
 
@@ -348,22 +344,89 @@ export class IDBService {
 	}
 
 	/**
-	 * @description adds item(s) to the database
-	 * @param store {string} name of the store
-	 * @param data {Array<T>} an array object to store in the database.
-	 * @param {Array<R>} an array of keys for the items
+	 * @description Updates a property of the stored value.
+	 *
+	 * @type T type of the property's value we need to update
+	 * @type R the value type returned by the operation.
+	 * @param stores {string} name of the store where the value is stored.
+	 * @param params {PutParams<T>} options that allows us to target the stored value
+	 * 	we need to update.
+	 * @param index {string|number|Date|IDBKeyRange} the index we're using to match 
+	 *	the values in the store. 
+	 * @param allMatches {boolean} if set to true, all the matching records for the given
+	 * 	property value will be updated. Default is false.
+	 * @return {Promise<R[]>} a promise that will enventually be fullfilled with 
+	 * 	the new updated stored values or fail with an error
 	 */
-	add<T>(store: string, data: Array<T>): Promise<any> {
+	updateObjectByIndex<T>(store: string,
+		index: string|number|Date|IDBKeyRange , params: PutParams<any>[], allMatches: boolean = false): Promise<T[]> {
+		// make sure client code hasn't forgotten to pass name and value
+		if (params.length === 0)  {return Promise.reject(Error("updateByIndex() needs at least one PutParams"));}
+		if (_.isUndefined(index)) {return Promise.reject(Error('updateByProperty() needs index of the value!'));}
+
+		// create the request
+		return this.getTransaction(store, 'readwrite').then(trans => {
+			
+			const objectStore = trans.objectStore(store);
+			
+			const promiseA = new Promise((resolve, reject) => {
+
+				const updateOne = (oldValue: T) => {
+					params.forEach(param => {
+						oldValue[param.name] = param.value;
+					});
+					const req = objectStore.put(oldValue);
+					return new Promise((f, g) => {
+						req.onsuccess = (evt) => {
+							resolve(oldValue);
+						};
+						req.onerror = (evt) => {
+							reject(evt);
+						};
+					});
+				};
+
+				if (allMatches) {
+					const promises: Promise<T>[] = [];
+					objectStore.openCursor(index).onsuccess = (evt) => {
+						const cursor: IDBCursorWithValue = (<IDBRequest>evt.target).result;
+						if (cursor) {
+							// reject immediately when we get an error
+							promises.push(updateOne(cursor.value as T));
+						} else {
+							Promise.all(promises).then(values => resolve(values));
+						}
+					};
+				} else {
+					objectStore.get(index).onsuccess = (evt) => {
+						const cursor: IDBCursorWithValue = (<IDBRequest>evt.target).result;
+						updateOne(cursor.value as T).then(value => resolve([value]));
+					};
+				}
+
+			}) as Promise<T[]>;
+
+			const promiseB = new Promise((resolve, reject) => {
+				trans.oncomplete = (evt) => { resolve() };
+			});
+
+			return Promise.all([promiseA, promiseB]).then((values) => values[0] as T[]);
+
+		});
+	}
+
+	/**
+	 * @description Create a structured clone of the value and store the value under the store.
+	 * @param store {string} name of the store
+	 * @param data {Array<T>} an array of values to store in the database.
+	 * @return {Array<T>} an array of items to return from the database.
+	 */
+	storeObjects<T>(store: string, data: Array<T>): Promise<T[]> {
 		return this.getTransaction(store, "readwrite").then(trans => {
+
 			const objectStore = trans.objectStore( store );
 
-			const promise1 = data.map(d => objectStore.add(d))
-				.map( req => new Promise((resolve, reject) => {
-					req.onerror = (errEvt) => { reject(errEvt); };
-					req.onsuccess = (evt)  => { resolve(); };
-				}));
-
-			const promise2 = new Promise((resolve, reject) => {
+			const promiseA = new Promise((resolve, reject) => {
 				/*
 				 * To determine if the add operation has completed successfully, 
 				 * listen for the transaction’s complete event in addition to the
@@ -372,7 +435,7 @@ export class IDBService {
 				 * the success event is only triggered when the transaction has been successfully queued.
 				 */
 				trans.oncomplete = (evt) => {
-					resolve();
+					resolve(data);
 				};
 
 				/* error event bubbles up */
@@ -381,8 +444,34 @@ export class IDBService {
 				};
 			});
 
-			return Promise.all([ promise1, promise2 ]);
+			const promiseB = Promise.all(
+				data.map(d => objectStore.add(d))
+				.map( req => new Promise((resolve, reject) => {
+					req.onerror = (errEvt) => { reject(errEvt); };
+					req.onsuccess = (evt)  => { resolve(); };
+				})));
+
+			return Promise.all([ promiseA, promiseB ])
+			// only project the first value
+				.then(values => values[0]) as Promise<T[]>;
 		});
+	}
+
+	/**
+	 * @description Delete an object store and the therefore all the stored objects in it.
+	 * @param store {string} name of the store to delete
+	 * @return {Promise<void>} returns a promise that will be full-filled or rejected open
+	 *	completion. 
+	 */
+	clearStore(store: string): Promise<void> {
+		return this.getTransaction(store, 'readwrite')
+			.then(trans => {
+				return new Promise<void>((resolve, reject) => {
+					trans.oncomplete = (evt) => { resolve(); };
+					trans.onerror = (err) => { reject(err); };
+					trans.objectStore(store).clear();
+				});
+			});
 	}
 
 }
