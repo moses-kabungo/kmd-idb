@@ -1,7 +1,6 @@
 /node_modules
 npm-debug.log
-index.html
-index1.html
+*.html
 main.*
 app.component.*
 *.log
