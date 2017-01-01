@@ -25,17 +25,6 @@ If everything goes ok, then you are ready to take off.
 
 To configure it, first do an `import {IDBModule, IDBServiceConfig} from 'kmd-idb'` in your root module. The module accepts a number of [options]().
 
-Also, we need to instruct System JS where it should look for the module by adding the following in your `systemjs.config.js` file
-
-```js
-System.config({
-  defaultJSExtension: 'true',
-  map: {
-    'kmd-idb': 'npm:kmd-idb/index'
-  }
-});
-```
-
 ```js
 // Typing isn't real necessary but is needed here for brevity.
 // IDE reminds us of the compulsory config options should we forget them,
@@ -81,6 +70,17 @@ const idbConfigs: IDBServiceConfig = {
 }) export class YourRootModuleClass {}
 ```
 
+Finally, we need to instruct System JS where it should look for the module by adding the following in your `systemjs.config.js` file
+
+```js
+System.config({
+  defaultJSExtension: 'true',
+  map: {
+    'kmd-idb': 'npm:kmd-idb/index'
+  }
+});
+```
+
 Ready? Great! Now the `IDBService` is closer to your application's [DI](https://angular.io/docs/ts/latest/guide/hierarchical-dependency-injection.html) tree. And you should probably [start injecting]() it in your components.
 
 ### Injecting the `IDBService`
@@ -113,7 +113,7 @@ If you decide you need to use the `IDBService` per application component, then r
 }) export class YourComponent {}
 ```
 
-### Example, Fetching Records. `IDBService.getAll()`
+### Example, Fetching Records. `IDBService.getObjects()`
 
 Say you need to fetch objects from the store named `customers`. The API returns the `Promise` of `Customer` objects through the `IDBService.getAll()`
 
@@ -121,33 +121,36 @@ Say you need to fetch objects from the store named `customers`. The API returns 
 
 // ...
 
-// in your component
+// mean while in your component
 constructor(private idbService: IDBService) {}
 
 ngOnInit() {
     const customersPromise: Promise<Customer> = 
-        idbService.getObjects<Customer>(["customers"], "customers");
-
-    // wait for the customers promise to resolve 
-    // or probably wrap it in the Observable fromPromise() you could subscribe to
-    // Observable.fromPromise(customersPromise)
-    //    .subscribe(customers => /* do something with customers */)
-    // fail safe
-    //    .catch(err => /* handle an error */);
-
-    // OR
-    // customersPromise.then(
-    //    customers => /* do something with customers */)
-    // fail safe
-    //    .catch(err => /* handle an error */);
+        idbService.getObjects<Customer>(["customers"], "customers")
+          .then(customers => /*do something with the customers*/);
 }
 ```
+
+
+
+### Module Configuration Options
+
+Following are the configuration parameters expected by the module.
+
+|Name of the Parameter|Type|Description|
+|-----------------------|------|------------|
+|`database`|`string`|Name of the database that will be used by your application.|
+| `version`               |  `nsigned long` | Version of the current database schema. If you increment this number, the database schema will upgraded by invoking the `onupgradeneeded` shown below.|
+| `onupgradeneeded` | `(IDBDatabase)=>IDBDdatabase`| A callback function that is invoked when an upgrade is needed, specifically because the version number has been increased or when the database is created for the first time.
+
 
 ### OK, What Next?
 
 Now that you have the `IDBService` installed in your application. You are ready to start storing objects, searching and deleting or modifying them while you application is accessed in an offline mode.
 
 **Dig deeper in the [Getting Started]() documents.**
+
+
 
 ### LICENSE
 
