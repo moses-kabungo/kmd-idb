@@ -115,7 +115,7 @@ constructor(private idbService: IDBService) {}
 
 ngOnInit() {
     const customersPromise: Promise<Customer> = 
-        idbService.getAll<Customer>(["customers"], "customers");
+        idbService.getObjects<Customer>(["customers"], "customers");
 
     // wait for the customers promise to resolve 
     // or probably wrap it in the Observable fromPromise() you could subscribe to
