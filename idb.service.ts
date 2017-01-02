@@ -39,7 +39,7 @@ export declare interface IDBServiceConfig {
 	 * @param db {IDBDatabase} database instance.
 	 * @return {IDBDatabase} returns the same instance that was passed to it
 	 */
-	onupgradeneeded: (db: IDBDatabase) => IDBDatabase;
+	onUpgradeNeeded: (db: IDBDatabase) => IDBDatabase;
 
 	/**
 	 * @description the callback to execute when the structure of the database
@@ -47,7 +47,7 @@ export declare interface IDBServiceConfig {
 	 * @param db {IDBDatabase} database instance
 	 * @return {IDBDatabase} returns the same instance that was passed to it
 	 */
-	onversionchange?: (db: IDBDatabase) => IDBDatabase;
+	onVersionChange?: (db: IDBDatabase) => IDBDatabase;
 
 	/**
 	 * @description When your web app changes in such a way that a version change is
@@ -56,9 +56,9 @@ export declare interface IDBServiceConfig {
 	 *	your app in another. When you call open() with a greater version than the actual
 	 *	version of the database, all other open databases must explicitly acknowledge
 	 *	the request before you can start making changes to the database (an onblocked
-	 *	event is fired until they are closed or reloaded). Here's how it works:
+	 *	event is fired until they are closed or reloaded).
 	 */
-	onblocked?: () => void
+	onBlocked?: () => void
 }
 
 /**
@@ -125,11 +125,11 @@ export class IDBService {
 	constructor ( @Inject(IDB_DI_CONFIG) private idbServiceConfig: IDBServiceConfig ) {
 		this.database = idbServiceConfig.database;
 		this.version  = idbServiceConfig.version;
-		this.onupgradeneeded = idbServiceConfig.onupgradeneeded;
-		this.onblocked = _.isUndefined(idbServiceConfig.onblocked) ? 
-			noop : idbServiceConfig.onblocked;
-		this.onversionchange = _.isUndefined(idbServiceConfig.onversionchange) ?
-			(db: IDBDatabase) => { return db; } : idbServiceConfig.onversionchange;
+		this.onupgradeneeded = idbServiceConfig.onUpgradeNeeded;
+		this.onblocked = _.isUndefined(idbServiceConfig.onBlocked) ? 
+			noop : idbServiceConfig.onBlocked;
+		this.onversionchange = _.isUndefined(idbServiceConfig.onVersionChange) ?
+			(db: IDBDatabase) => { return db; } : idbServiceConfig.onVersionChange;
 	}
 
 	/* throws TypeError when the value of version is zero or a negative number or not a number. */
@@ -321,7 +321,7 @@ export class IDBService {
 	 * @param keyRage {IDBKeyRange} the key constraint of the object in the store we need to delete.
 	 * @return {Promise<any>} a promise that may enventually resolve or fail upon completion.
 	 */
-	removeObjectByKey(stores: string|Array<string>,
+	removeObjectsByIndex(stores: string|Array<string>,
 			store: string, keyRange: IDBKeyRange
 	): Promise<any> {
 		return this.getTransaction(stores, 'readwrite').then(trans => {
@@ -390,7 +390,7 @@ export class IDBService {
 	 * @return {Promise<R[]>} a promise that will enventually be fullfilled with 
 	 * 	the new updated stored values or fail with an error
 	 */
-	updateObjectByIndex<T>(store: string,
+	updateObjectsByIndex<T>(store: string,
 		index: string|number|Date|IDBKeyRange , params: PutParams<any>[], allMatches: boolean = false): Promise<T[]> {
 		// make sure client code hasn't forgotten to pass name and value
 		if (params.length === 0)  {return Promise.reject(Error("updateByIndex() needs at least one PutParams"));}
