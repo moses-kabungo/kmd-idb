@@ -113,7 +113,9 @@ If you decide you need to use the `IDBService` per application component, then r
 }) export class YourComponent {}
 ```
 
-### Example, Fetching Records. `IDBService.getObjects()`
+### Examples
+
+#### Fetching Objects. `IDBService.getObjects()`
 
 Say you need to fetch objects from the store named `customers`. The API returns the `Promise` of `Customer` objects through the `IDBService.getObjects()`
 
@@ -126,12 +128,72 @@ constructor(private idbService: IDBService) {}
 
 ngOnInit() {
     const customersPromise: Promise<Customer> = 
-        idbService.getObjects<Customer>(["customers"], "customers")
-          .then(customers => /*do something with the customers*/);
+        idbService.getObjects<Customer>(["customers"], "customers");
+    customersPromise.then(customers => /*do something with the customers*/)
+      .catch(err => /* fail gracefully */);
 }
 ```
 
+#### Fetching An Object by Key. `IDBService.getObjectByKey()`
 
+The service defines the method `IDBService.getObjectByKey([stores], store, key)` that is used to fetch object stored under the key.
+
+```js
+const customersPromise: Promise<Customer> =
+  idbService.getObjectByKey<Customer>(
+    ["customers"], "customer", IDBKeyRange.only("someone@example.com"));
+customersPromise.then(customer => /*do something with the customer*/)
+  .catch(err => /* fail gracefully */);
+```
+
+#### Store An Object. `IDBService.storeObjects()`
+
+Use the method `IDBService.storeObjects(store, [objects])` to store objects. The method returns an array of stored objects so that you can do something useful with the results, such as, updating user interface by appending newly created objects.
+
+Here is how you would use it:
+
+```js
+const newCustomersPromise: Promise<Customer> =
+  idbService.storeObjects(
+    ["customers"], [{name: "DNA Publishers", email: "dbapubs@company.com"}]);
+newCustomersPromise.then(customers => /* do something useful */)
+  .catch(err => /* fail gracefully */);
+```
+
+##### NOTE
+>IDBService merits from the indexedDB API by wrapping all the operations in a transaction. If one of the operation in a batch under transaction fails, the transaction is rolled back.
+
+#### Updating Stored Objects. `IDBService.updateObjectsByIndex()`
+
+Use the method `IDBService.updateObjectsByIndex(store, index, [params])` to update objects in a store. By default, the method will update only the first matching object. It is possible to control the number of matching objects by using `index` range and by adding `true` to the fourth argument of the method.
+
+The fourth argument is assigned to the `boolean` parameter that hints the method if it should update as many matching objects as possible. Default is false which means only the first match is updated.
+
+```js
+const updatePromise: Promise<Customer> =
+  idbService.updateObjectsByIndex<Customer>(
+    "customers", "DNA Publishers", [{ name: 'name', value: 'DMA Publishers' }]
+    /*, true --- to update all objects whose name is DNA Publishers */)
+updatePromise.then(newCustomers => /* replace old customers */)
+  .catch(err => /* fail gracefully */);
+```
+
+##### NOTE
+> You cannot and you should not update the keyPath (object's property that you specified as the keyPath, aka the primary key). Doing so will always throw an error. Instead, the `IDBService` provides the method `replaceObjectByKey()` method that deletes the object and add newer one.
+
+#### Deleting Stored Object `IDBService.removeObjectsByKey()`
+
+Use the method `IDBService.removeObjectsByKey([stores], store, index)` to delete objects from the store.
+
+Here is how you would do it
+
+```js
+const deletePromise = idbService
+  .removeObjectsByKey(["customers"], "customer", IDBKeyRange.between(
+      "DMA Publisher", "FNX Couriers"));
+deletePromise.then(_ => /* do something */)
+  .catch(err => /* fail gracefully */)
+```
 
 ### Module Configuration Options
 
@@ -139,9 +201,11 @@ Following are the configuration parameters expected by the module.
 
 |Name of the Parameter|Type|Description|
 |-----------------------|------|------------|
-|`database`|`string`|Name of the database that will be used by your application.|
-| `version`               |  `nsigned long` | Version of the current database schema. If you increment this number, the database schema will upgraded by invoking the `onupgradeneeded` shown below.|
-| `onupgradeneeded` | `(IDBDatabase)=>IDBDdatabase`| A callback function that is invoked when an upgrade is needed, specifically because the version number has been increased or when the database is created for the first time.
+|`database`(required)|`string`|Name of the database that will be used by your application.|
+|`version`(required)|`unsigned long long`|Version of the current database schema. If you increment this number, the database schema will upgraded by invoking the `onUpgradeNeeded` shown below.|
+|`onUpgradeNeeded`(required)|`(IDBDatabase)=>IDBDdatabase`|The callback function that is invoked when an upgrade is needed, specifically because the version number has been increased or when the database is created for the first time.
+|`onVersionChange`(optional)|`(IDBDatabase)=>IDBDatabase`|The callback to execute when the structure of the database is altered, either when an upgrade is needed or when the database is destroyed.|
+|`onBlocked`(optional)|`()=>void`|When your web app changes in such a way that a version change is required for your database, you need to consider what happens if the user has the old version of your app open in one tab and then loads the new version of your app in another. When you specify schema changes with a greater version than the actual version of the database, all other open databases must explicitly acknowledge the request before you can start making changes to the database (an onblocked event is fired until they are closed or reloaded).|
 
 
 ### OK, What Next?
