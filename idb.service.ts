@@ -6,7 +6,9 @@ import * as _ from 'lodash';
 /* stupid cast operation */
 function cast<T>(param: any): T {
 	return param as T;
-} 
+}
+
+const noop = () => {};
 
 /**
  * @description The qualifier used by Angular's injector. Client code must
@@ -34,8 +36,29 @@ export declare interface IDBServiceConfig {
 	 * @description the callback is invoked when the database is created or when
 	 * upgrade is needed.
 	 * @type Function
+	 * @param db {IDBDatabase} database instance.
+	 * @return {IDBDatabase} returns the same instance that was passed to it
 	 */
 	onupgradeneeded: (db: IDBDatabase) => IDBDatabase;
+
+	/**
+	 * @description the callback to execute when the structure of the database
+	 * 	is altered, either when an upgrade is needed or when the database is destroyed.
+	 * @param db {IDBDatabase} database instance
+	 * @return {IDBDatabase} returns the same instance that was passed to it
+	 */
+	onversionchange?: (db: IDBDatabase) => IDBDatabase;
+
+	/**
+	 * @description When your web app changes in such a way that a version change is
+	 * 	required for your database, you need to consider what happens if the user has
+	 *	the old version of your app open in one tab and then loads the new version of
+	 *	your app in another. When you call open() with a greater version than the actual
+	 *	version of the database, all other open databases must explicitly acknowledge
+	 *	the request before you can start making changes to the database (an onblocked
+	 *	event is fired until they are closed or reloaded). Here's how it works:
+	 */
+	onblocked?: () => void
 }
 
 /**
@@ -95,12 +118,18 @@ export class IDBService {
 	private database: string;
 	private version: number;
 	private onupgradeneeded: (db: IDBDatabase) => IDBDatabase;
+	private onblocked: () => void;
+	private onversionchange: (db: IDBDatabase) => IDBDatabase;
 	private _db: IDBDatabase;
 
 	constructor ( @Inject(IDB_DI_CONFIG) private idbServiceConfig: IDBServiceConfig ) {
 		this.database = idbServiceConfig.database;
 		this.version  = idbServiceConfig.version;
-		this.onupgradeneeded = idbServiceConfig.onupgradeneeded; 
+		this.onupgradeneeded = idbServiceConfig.onupgradeneeded;
+		this.onblocked = _.isUndefined(idbServiceConfig.onblocked) ? 
+			noop : idbServiceConfig.onblocked;
+		this.onversionchange = _.isUndefined(idbServiceConfig.onversionchange) ?
+			(db: IDBDatabase) => { return db; } : idbServiceConfig.onversionchange;
 	}
 
 	/* throws TypeError when the value of version is zero or a negative number or not a number. */
@@ -133,11 +162,15 @@ export class IDBService {
 		/*  */
 		return new Promise((resolve, reject) => {
 			/* bind onerror event on rejection */
-			request.onerror = reject;
+			request.onerror = (evt) => { reject(evt.error); };
 			/* bind onsuccess event on resolve */
-			request.onsuccess = ( evt ) => { resolve( (<IDBOpenDBRequest>evt.currentTarget).result ); }
+			request.onsuccess = ( evt ) => { resolve( this.onversionchange((<IDBOpenDBRequest>evt.currentTarget).result )); }
 			/* when upgrade is needed */
 			request.onupgradeneeded = ( evt ) => { resolve( this.onupgradeneeded( (<IDBOpenDBRequest>evt.currentTarget).result )); }
+			/* when the database can't be opened because of different versions in application instances */
+			request.onblocked = () => {
+				this.onblocked();
+			};
 		});
 	}
 
@@ -166,6 +199,7 @@ export class IDBService {
 
 		return this.getTransaction(stores).then( trans => {
 				const request = trans.objectStore(store).get(params.values);
+
 				return new Promise<T>((resolve, reject) => {
 					request.onerror = (errorEvent) => { reject(errorEvent); };
 					request.onsuccess = (evt) => {
@@ -384,6 +418,7 @@ export class IDBService {
 					});
 				};
 
+				// should we update all matches or just one match?
 				if (allMatches) {
 					const promises: Promise<T>[] = [];
 					objectStore.openCursor(index).onsuccess = (evt) => {
