@@ -1,3 +1,7 @@
+/**
+ * System configuration for Angular samples
+ * Adjust as necessary for your application needs.
+ */
 (function (global) {
   System.config({
     paths: {
@@ -6,17 +10,28 @@
     },
     // map tells the System loader where to look for things
     map: {
-      root: '/'
+      // our app is within the app folder
+      src: 'src',
+
       // angular bundles
       '@angular/core': 'npm:@angular/core/bundles/core.umd.js',
+      '@angular/common': 'npm:@angular/common/bundles/common.umd.js',
+      '@angular/compiler': 'npm:@angular/compiler/bundles/compiler.umd.js',
+      '@angular/platform-browser': 'npm:@angular/platform-browser/bundles/platform-browser.umd.js',
+      '@angular/platform-browser-dynamic': 'npm:@angular/platform-browser-dynamic/bundles/platform-browser-dynamic.umd.js',
 
-      // other libraries
-      // 'rxjs':   'npm:rxjs',
-      'lodash': 'npm:lodash/lodash.js'
+      'lodash': 'npm:lodash/lodash.js',
+      'rxjs':   'npm:rxjs'
     },
 
     packages: {
-      root: {
+      src: {
+        defaultExtension: 'js'
+      },
+      rxjs: {
+        defaultExtension: 'js'
+      },
+      lodash: {
         defaultExtension: 'js'
       }
     }
