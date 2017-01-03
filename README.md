@@ -120,18 +120,11 @@ If you decide you need to use the `IDBService` per application component, then r
 Say you need to fetch objects from the store named `customers`. The API returns the `Promise` of `Customer` objects through the `IDBService.getObjects()`
 
 ```js
+const customersPromise: Promise<Customer> = 
+  idbService.getObjects<Customer>(["customers"], "customers");
 
-// ...
-
-// mean while in your component
-constructor(private idbService: IDBService) {}
-
-ngOnInit() {
-    const customersPromise: Promise<Customer> = 
-        idbService.getObjects<Customer>(["customers"], "customers");
-    customersPromise.then(customers => /*do something with the customers*/)
-      .catch(err => /* fail gracefully */);
-}
+customersPromise.then(customers => /* do something with the customers */)
+  .catch(err => /* fail gracefully */);
 ```
 
 #### Fetching An Object by Key. `IDBService.getObjectByKey()`
@@ -142,6 +135,7 @@ The service defines the method `IDBService.getObjectByKey([stores], store, key)`
 const customersPromise: Promise<Customer> =
   idbService.getObjectByKey<Customer>(
     ["customers"], "customer", IDBKeyRange.only("someone@example.com"));
+
 customersPromise.then(customer => /*do something with the customer*/)
   .catch(err => /* fail gracefully */);
 ```
@@ -161,11 +155,16 @@ newCustomersPromise.then(customers => /* do something useful */)
 ```
 
 ##### NOTE
->IDBService merits from the indexedDB API by wrapping all the operations in a transaction. If one of the operation in a batch under transaction fails, the transaction is rolled back.
+>`IDBService` merits from the indexedDB API by wrapping all the operations in a transaction. If one of the operation in a batch under transaction fails, the transaction is rolled back.
+
+>An attempt to store more than one object with similar keys will result into an exception.
+
+##### HINT
+>Use the the stored objects when the promise is resolved instead of reloading objects from the database. This is a common scenareo!
 
 #### Updating Stored Objects. `IDBService.updateObjectsByIndex()`
 
-Use the method `IDBService.updateObjectsByIndex(store, index, [params])` to update objects in a store. By default, the method will update only the first matching object. It is possible to control the number of matching objects by using `index` range and by adding `true` to the fourth argument of the method.
+Use the method `IDBService.updateObjectsByIndex(store, indexName, indexVal, [params])` to update objects in a store. By default, the method will update only the first matching object. It is possible to control the number of matching objects by using `index` range and by adding `true` as the fourth argument to the method.
 
 The fourth argument is assigned to the `boolean` parameter that hints the method if it should update as many matching objects as possible. Default is false which means only the first match is updated.
 
@@ -179,7 +178,7 @@ updatePromise.then(newCustomers => /* replace old customers */)
 ```
 
 ##### NOTE
-> You cannot and you should not update the keyPath (object's property that you specified as the keyPath, aka the primary key). Doing so will always throw an error. Instead, the `IDBService` provides the method `replaceObjectByKey()` method that deletes the object and add newer one.
+> You cannot and you should not update the keyPath (object's property that you specified as the keyPath, aka the primary key). Doing so will always result into an exception being thrown. Instead, the `IDBService` provides the method `replaceObjectByKey()` method that deletes the object and add newer one.
 
 #### Deleting Stored Object `IDBService.removeObjectsByKey()`
 
@@ -206,15 +205,6 @@ Following are the configuration parameters expected by the module.
 |`onUpgradeNeeded`(required)|`(IDBDatabase)=>IDBDdatabase`|The callback function that is invoked when an upgrade is needed, specifically because the version number has been increased or when the database is created for the first time.
 |`onVersionChange`(optional)|`(IDBDatabase)=>IDBDatabase`|The callback to execute when the structure of the database is altered, either when an upgrade is needed or when the database is destroyed.|
 |`onBlocked`(optional)|`()=>void`|When your web app changes in such a way that a version change is required for your database, you need to consider what happens if the user has the old version of your app open in one tab and then loads the new version of your app in another. When you specify schema changes with a greater version than the actual version of the database, all other open databases must explicitly acknowledge the request before you can start making changes to the database (an onblocked event is fired until they are closed or reloaded).|
-
-
-### OK, What Next?
-
-Now that you have the `IDBService` installed in your application. You are ready to start storing objects, searching and deleting or modifying them while you application is accessed in an offline mode.
-
-**Dig deeper in the [Getting Started]() documents.**
-
-
 
 ### LICENSE
 
