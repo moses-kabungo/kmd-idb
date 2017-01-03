@@ -171,7 +171,7 @@ The fourth argument is assigned to the `boolean` parameter that hints the method
 ```js
 const updatePromise: Promise<Customer> =
   idbService.updateObjectsByIndex<Customer>(
-    "customers", "DNA Publishers", [{ name: 'name', value: 'DMA Publishers' }]
+    "customers", "name", "DNA Publishers", [{ name: 'name', value: 'DMA Publishers' }]
     /*, true --- to update all objects whose name is DNA Publishers */)
 updatePromise.then(newCustomers => /* replace old customers */)
   .catch(err => /* fail gracefully */);
@@ -188,11 +188,29 @@ Here is how you would do it
 
 ```js
 const deletePromise = idbService
-  .removeObjectsByKey(["customers"], "customer", IDBKeyRange.between(
+  .removeObjectsByKey<Customer>(["customers"], "customer", IDBKeyRange.between(
       "DMA Publisher", "FNX Couriers"));
 deletePromise.then(_ => /* do something */)
   .catch(err => /* fail gracefully */)
 ```
+
+
+#### Replacing an Object. `IDBService.replaceObjectByKey()`
+
+Sometimes you just need to replace the object in a store. Internally, the `IDService` erase and add new object. So you may accomplish this operation by chaining the two operations. But that requires you to type many lines. Not to mention it involves two distinct database transactions in the invent loop.
+
+To replace an object, just use `IDBService.repalaceObjectByKey(store, keyVal, object)` as
+
+```js
+const replacePromise: Promise<Customer> = idbService
+  .replaceByKey('customers', 'dmapublishers@example.com', newData);
+
+replacePromise.then(replacedRecord => /* do something useful */)
+  .catch(err => /* fail gracefully */)
+```
+
+##### HINT
+> Use the returned record by replacing the old record in your collection.
 
 ### Module Configuration Options
 
