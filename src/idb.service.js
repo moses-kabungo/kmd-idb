@@ -17,6 +17,7 @@ var _ = require('lodash');
 function cast(param) {
     return param;
 }
+var noop = function () { };
 /**
  * @description The qualifier used by Angular's injector. Client code must
  * provide the implementation of {@code IDBServiceConfig}.
@@ -27,7 +28,11 @@ var IDBService = (function () {
         this.idbServiceConfig = idbServiceConfig;
         this.database = idbServiceConfig.database;
         this.version = idbServiceConfig.version;
-        this.onupgradeneeded = idbServiceConfig.onupgradeneeded;
+        this.onupgradeneeded = idbServiceConfig.onUpgradeNeeded;
+        this.onblocked = _.isUndefined(idbServiceConfig.onBlocked) ?
+            noop : idbServiceConfig.onBlocked;
+        idbServiceConfig.onVersionChange = _.isUndefined(idbServiceConfig.onVersionChange) ?
+            function (db) { return true; } : idbServiceConfig.onVersionChange;
     }
     /* throws TypeError when the value of version is zero or a negative number or not a number. */
     IDBService.prototype._init_ = function () {
@@ -50,16 +55,35 @@ var IDBService = (function () {
             request = indexedDB.open(this.database, this.version);
         }
         catch (e) {
-            return Promise.reject(e);
+            return Promise.reject("ERROR: " + e);
         }
         /*  */
         return new Promise(function (resolve, reject) {
+            var attachOnVersionChange = function (db) {
+                /*db.onversionchange = (evt) => {
+                    console.log('Version Change...');
+                };*/
+                _this.idbServiceConfig.onVersionChange(db);
+                return db;
+            };
             /* bind onerror event on rejection */
-            request.onerror = reject;
+            request.onerror = function (evt) { reject(evt); };
             /* bind onsuccess event on resolve */
-            request.onsuccess = function (evt) { resolve(evt.currentTarget.result); };
+            request.onsuccess = function (evt) {
+                var db = evt.target.result;
+                resolve(db);
+            };
             /* when upgrade is needed */
-            request.onupgradeneeded = function (evt) { resolve(_this.onupgradeneeded(evt.currentTarget.result)); };
+            request.onupgradeneeded = function (evt) {
+                var db = evt.currentTarget.result;
+                if (_this.idbServiceConfig.onVersionChange(db)) {
+                    _this.idbServiceConfig.onUpgradeNeeded(db);
+                }
+            };
+            /* when the database can't be opened because of different versions in application instances */
+            request.onblocked = function () {
+                _this.onblocked();
+            };
         });
     };
     // get transaction
@@ -75,13 +99,10 @@ var IDBService = (function () {
      * @param op {(any) => T} optional casting operator
      * @return {Promise<T>} a promise of result from the database.
      */
-    IDBService.prototype.getObjectByKey = function (stores, store, params) {
-        if (_.isUndefined(params.values)) {
-            return Promise.reject(Error("at least one value for the object's key needs to be passed!"));
-        }
-        var fn = params.castOp || cast;
+    IDBService.prototype.getObjectByKey = function (stores, store, keyRange, _cast) {
+        var fn = _.isUndefined(_cast) ? cast : _cast;
         return this.getTransaction(stores).then(function (trans) {
-            var request = trans.objectStore(store).get(params.values);
+            var request = trans.objectStore(store).get(keyRange);
             return new Promise(function (resolve, reject) {
                 request.onerror = function (errorEvent) { reject(errorEvent); };
                 request.onsuccess = function (evt) {
@@ -97,12 +118,12 @@ var IDBService = (function () {
      * @param params {GetParams} optional parameters supplied to the query
      * @return {Promise<Array<T>>}
      */
-    IDBService.prototype.getObjects = function (stores, store, params) {
-        var fn = (params && params.castOp) || cast;
-        return this.getTransaction(stores)
-            .then(function (trans) {
+    IDBService.prototype.getObjects = function (stores, store, keyRange, reverse, _cast) {
+        if (reverse === void 0) { reverse = false; }
+        var fn = _cast || cast;
+        return this.getTransaction(stores).then(function (trans) {
             var cursorReq = trans.objectStore(store)
-                .openCursor(params && params.values, (params && params.reverse) ? "prev" : undefined);
+                .openCursor(_.isUndefined(keyRange) ? undefined : keyRange, reverse ? undefined : "prev");
             var res = [];
             return new Promise(function (resolve, reject) {
                 cursorReq.onerror = function (errorEvt) { reject(errorEvt); };
@@ -120,63 +141,31 @@ var IDBService = (function () {
         });
     };
     /**
-     * @description fetches a single object from the database using indexed property
-     * @param stores {string|Array<string>} store name(s) from which our query needs to span.
-     * @param store {string} name of the object store we need to read from
-     * @param params {GetParams<T>} parameters that narrows down our matches. Particaulary,
-     * 	you may need to define `index` and `values` parameters.
-     * @return {Promise<T>} a promise of `T` object item from the database.
+     * @description get all indexed objects using an index.
+     * @param stores {string|string[]} store or name of the store where the operation should span
+     * @param store {string} name of the store we'are going to fetch the items
+     * @param range {string|number|Date|IDKeyRange|IDBArrayKey} value of the index/indecies
+     * @param reverse {boolean} if true, the objects will be fetched in reverse order.
+     *	default is false.
+     * @param _cast {Function} the casting operation for the items
+     * @return {Promise<T[]>} the promise that will resolve with result, of fail should anything goes wrong.
      */
-    IDBService.prototype.getObjectByIndex = function (stores, store, params) {
-        if (_.isUndefined(params.index)) {
-            return Promise.reject(Error("getOneByIndex() needs name of the index!"));
-        }
-        if (_.isUndefined(params.values)) {
-            return Promise.reject(Error("getOneByIndex() needs at least one value."));
-        }
-        // used to cast
-        var fn = params.castOp || cast;
+    IDBService.prototype.getObjectsByIndex = function (stores, store, index, range, reverse, _cast) {
+        if (reverse === void 0) { reverse = false; }
+        var fn = _cast || cast;
         return this.getTransaction(stores).then(function (trans) {
-            var req = trans.objectStore(store).index(params.index).get(params.values);
+            var _index_ = trans.objectStore(store).index(index).openCursor(range, reverse ? "prev" : undefined);
+            var res = [];
             return new Promise(function (resolve, reject) {
-                req.onerror = function (errorEvt) {
-                    reject(errorEvt);
-                };
-                req.onsuccess = function (evt) {
-                    resolve(fn(evt.target.result));
-                };
-            });
-        });
-    };
-    /**
-     * @description fetches all records from the database matching the index's value.
-     * @param stores {string|Array<string>} the store object(s) of which our search operation will span.
-     * @param store {string} name of the object store we need to particulary search from
-     * @param params {GetParams<T>} parameters that narrows down matches. Specifically, you may
-     * need to define `index` parameter.
-     * @return {Promise<Array<T>>} a promise of  an array of`<T>` object items from the database.
-     */
-    IDBService.prototype.getObjectsByIndex = function (stores, store, params) {
-        if (_.isEmpty(params.index)) {
-            return Promise.reject("getAllByIndex<T>() needs at least one index!");
-        }
-        var fn = params.castOp || cast;
-        return this.getTransaction(stores).then(function (trans) {
-            var cursorReq = trans.objectStore(store)
-                .index(params.index).openCursor(params.values, params.reverse ? "prev" : null);
-            return new Promise(function (resolve, reject) {
-                cursorReq.onerror = function (errorEvt) {
-                    reject(errorEvt);
-                };
-                var ret = [];
-                cursorReq.onsuccess = function (evt) {
-                    var cursorWithValue = evt.target.result;
-                    if (cursorWithValue) {
-                        ret.push(fn(cursorWithValue.value));
-                        cursorWithValue.continue();
+                trans.onerror = function (evt) { console.error(evt); reject(evt); };
+                _index_.onsuccess = function (evt) {
+                    var cursor = evt.currentTarget.result;
+                    if (cursor) {
+                        res.push(fn(cursor.value));
+                        cursor.continue();
                     }
                     else {
-                        resolve(ret);
+                        resolve(res);
                     }
                 };
             });
@@ -189,9 +178,9 @@ var IDBService = (function () {
      * @param keyRage {IDBKeyRange} the key constraint of the object in the store we need to delete.
      * @return {Promise<any>} a promise that may enventually resolve or fail upon completion.
      */
-    IDBService.prototype.removeObjectByKey = function (stores, store, keyRange) {
+    IDBService.prototype.removeObjectsByKey = function (stores, store, range) {
         return this.getTransaction(stores, 'readwrite').then(function (trans) {
-            var objectStore = trans.objectStore(store).delete(keyRange);
+            var objectStore = trans.objectStore(store).delete(range);
             return new Promise(function (resolve, reject) {
                 trans.onerror = function (errorEvt) {
                     reject(errorEvt);
@@ -221,14 +210,14 @@ var IDBService = (function () {
             return new Promise(function (resolve, reject) {
                 // wait for the transaction to complete
                 trans.oncomplete = function () { resolve(value); };
-                trans.onerror = function (evt) { reject(evt); };
+                trans.onerror = function (evt) { reject(evt.error); };
                 // firstly, we're deleting the record from the database
                 // because the key is going to be altered as well...
-                var req = trans.objectStore(store).delete(key);
-                req.onsuccess = function (evt) {
+                trans.objectStore(store).delete(key)
+                    .onsuccess = function (evt) {
                     trans.objectStore(store)
                         .add(value)
-                        .onsuccess = function (evt2) { console.log("Done!"); };
+                        .onsuccess = function (evt2) { };
                 };
             });
         });
@@ -242,14 +231,14 @@ var IDBService = (function () {
      * @param stores {string} name of the store where the value is stored.
      * @param params {PutParams<T>} options that allows us to target the stored value
      * 	we need to update.
-     * @param index {string|number|Date|IDBKeyRange} the index we're using to match
+     * @param index {string} the index we're using to match
      *	the values in the store.
      * @param allMatches {boolean} if set to true, all the matching records for the given
      * 	property value will be updated. Default is false.
      * @return {Promise<R[]>} a promise that will enventually be fullfilled with
      * 	the new updated stored values or fail with an error
      */
-    IDBService.prototype.updateObjectByIndex = function (store, index, params, allMatches) {
+    IDBService.prototype.updateObjectsByIndex = function (store, index, indexVal, params, allMatches) {
         if (allMatches === void 0) { allMatches = false; }
         // make sure client code hasn't forgotten to pass name and value
         if (params.length === 0) {
@@ -269,16 +258,17 @@ var IDBService = (function () {
                     var req = objectStore.put(oldValue);
                     return new Promise(function (f, g) {
                         req.onsuccess = function (evt) {
-                            resolve(oldValue);
+                            f(oldValue);
                         };
                         req.onerror = function (evt) {
-                            reject(evt);
+                            g(evt);
                         };
                     });
                 };
+                // should we update all matches or just one match?
                 if (allMatches) {
                     var promises_1 = [];
-                    objectStore.openCursor(index).onsuccess = function (evt) {
+                    objectStore.index(index).openCursor(indexVal).onsuccess = function (evt) {
                         var cursor = evt.target.result;
                         if (cursor) {
                             // reject immediately when we get an error
@@ -290,16 +280,18 @@ var IDBService = (function () {
                     };
                 }
                 else {
-                    objectStore.get(index).onsuccess = function (evt) {
-                        var cursor = evt.target.result;
-                        updateOne(cursor.value).then(function (value) { return resolve([value]); });
+                    objectStore.index(index).get(indexVal).onsuccess = function (evt) {
+                        var value = evt.currentTarget.result;
+                        updateOne(value).then(function (newValue) { return resolve(newValue); });
                     };
                 }
             });
             var promiseB = new Promise(function (resolve, reject) {
                 trans.oncomplete = function (evt) { resolve(); };
             });
-            return Promise.all([promiseA, promiseB]).then(function (values) { return values[0]; });
+            return Promise.all([promiseA, promiseB]).then(function (values) {
+                return [values[0]];
+            });
         });
     };
     /**

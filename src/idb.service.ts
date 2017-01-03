@@ -44,10 +44,12 @@ export declare interface IDBServiceConfig {
 	/**
 	 * @description the callback to execute when the structure of the database
 	 * 	is altered, either when an upgrade is needed or when the database is destroyed.
+	 *	It is important to note that, when the callback returns false, the onUpgradeNeeded
+	 *	callback method will not be invoked.
 	 * @param db {IDBDatabase} database instance
-	 * @return {IDBDatabase} returns the same instance that was passed to it
+	 * @return {boolean} return true if the onUpgradeNeeded should be invoked. Returns false otherwise
 	 */
-	onVersionChange?: (db: IDBDatabase) => IDBDatabase;
+	onVersionChange?: (db: IDBDatabase) => boolean;
 
 	/**
 	 * @description When your web app changes in such a way that a version change is
@@ -115,11 +117,10 @@ export declare interface PutParams<T> {
 @Injectable()
 export class IDBService {
 
-	private database: string;
-	private version: number;
-	private onupgradeneeded: (db: IDBDatabase) => IDBDatabase;
+	database: string;
+	version: number;
+	onupgradeneeded: (db: IDBDatabase) => IDBDatabase;
 	private onblocked: () => void;
-	private onversionchange: (db: IDBDatabase) => IDBDatabase;
 	private _db: IDBDatabase;
 
 	constructor ( @Inject(IDB_DI_CONFIG) private idbServiceConfig: IDBServiceConfig ) {
@@ -128,12 +129,12 @@ export class IDBService {
 		this.onupgradeneeded = idbServiceConfig.onUpgradeNeeded;
 		this.onblocked = _.isUndefined(idbServiceConfig.onBlocked) ? 
 			noop : idbServiceConfig.onBlocked;
-		this.onversionchange = _.isUndefined(idbServiceConfig.onVersionChange) ?
-			(db: IDBDatabase) => { return db; } : idbServiceConfig.onVersionChange;
+		idbServiceConfig.onVersionChange = _.isUndefined(idbServiceConfig.onVersionChange) ?
+			(db: IDBDatabase) => { return true; } : idbServiceConfig.onVersionChange;
 	}
 
 	/* throws TypeError when the value of version is zero or a negative number or not a number. */
-	private _init_(): Promise<IDBDatabase> {
+	_init_(): Promise<IDBDatabase> {
 
 		let indexedDB: IDBFactory = window.indexedDB 
 			/*|| window.mozIndexedDB || window.webkitIndexedDB || window.msIndexedDB*/;
@@ -156,17 +157,36 @@ export class IDBService {
 		try {
 			request = indexedDB.open( this.database, this.version );
 		} catch (e) {
-			return Promise.reject( e );
+			return Promise.reject( "ERROR: " + e );
 		}
 
 		/*  */
 		return new Promise((resolve, reject) => {
+
+			const attachOnVersionChange = ( db: IDBDatabase ) => {
+				/*db.onversionchange = (evt) => {
+					console.log('Version Change...');	
+				};*/
+				this.idbServiceConfig.onVersionChange(db);
+				return db;
+			};
+
 			/* bind onerror event on rejection */
-			request.onerror = (evt) => { reject(evt.error); };
+			request.onerror = (evt) => { reject(evt); };
 			/* bind onsuccess event on resolve */
-			request.onsuccess = ( evt ) => { resolve( this.onversionchange((<IDBOpenDBRequest>evt.currentTarget).result )); }
+			request.onsuccess = ( evt ) => {
+				const db = (<IDBOpenDBRequest>evt.target).result;
+				resolve(db);
+			};
 			/* when upgrade is needed */
-			request.onupgradeneeded = ( evt ) => { resolve( this.onupgradeneeded( (<IDBOpenDBRequest>evt.currentTarget).result )); }
+			request.onupgradeneeded = ( evt: IDBVersionChangeEvent ) => {
+				const db = (<IDBOpenDBRequest>evt.currentTarget).result;
+
+				if (this.idbServiceConfig.onVersionChange(db)) {
+					this.idbServiceConfig.onUpgradeNeeded(db);
+				}
+
+			};
 			/* when the database can't be opened because of different versions in application instances */
 			request.onblocked = () => {
 				this.onblocked();
@@ -188,24 +208,20 @@ export class IDBService {
 	 * @param op {(any) => T} optional casting operator
 	 * @return {Promise<T>} a promise of result from the database.
 	 */
-	getObjectByKey<T>(stores: string | Array<string>, store: string, params: GetParams<T>): Promise<T> {
+	getObjectByKey<T>(stores: string | Array<string>,
+		store: string, keyRange: IDBKeyRange, _cast?: (...params: any[]) => T): Promise<T> {
 		
-		if (_.isUndefined( params.values )) {
-			return Promise.reject(
-				Error("at least one value for the object's key needs to be passed!"));
-		}
-
-		const fn = params.castOp || cast;
+		const fn = _.isUndefined(_cast) ? cast : _cast;
 
 		return this.getTransaction(stores).then( trans => {
-				const request = trans.objectStore(store).get(params.values);
+			const request = trans.objectStore(store).get(keyRange);
 
-				return new Promise<T>((resolve, reject) => {
-					request.onerror = (errorEvent) => { reject(errorEvent); };
-					request.onsuccess = (evt) => {
-						resolve( fn<T>((<IDBRequest>evt.target).result)); };
-				});
+			return new Promise<T>((resolve, reject) => {
+				request.onerror = (errorEvent) => { reject(errorEvent); };
+				request.onsuccess = (evt) => {
+					resolve( fn<T>((<IDBRequest>evt.target).result)); };
 			});
+		});
 	}
 
 	/**
@@ -216,100 +232,63 @@ export class IDBService {
 	 * @return {Promise<Array<T>>}
 	 */
 	getObjects<T>(stores: string|Array<string>, 
-		store: string, params?: GetParams<T> ): Promise<Array<T>> {
+		store: string, keyRange?: IDBKeyRange, reverse: boolean = false, _cast?: (...params:any[]) => T): Promise<Array<T>> {
 
-		const fn = (params && params.castOp) || cast;
-		return this.getTransaction( stores )
-			.then( trans => {
+		const fn = _cast || cast;
+		return this.getTransaction( stores ).then( trans => {
 				
-				const cursorReq = trans.objectStore(store)
-					.openCursor( params && params.values, (params && params.reverse) ? "prev": undefined );
+			const cursorReq = trans.objectStore(store)
+				.openCursor(
+					_.isUndefined(keyRange) ? undefined : keyRange, 
+					reverse ? undefined : "prev");
 
-				const res: T[] = [];
-				return new Promise<Array<T>>((resolve, reject) => {
-					cursorReq.onerror = (errorEvt) => { reject(errorEvt) };
-					cursorReq.onsuccess = (evt) => {
-						let cursor: IDBCursorWithValue = (<IDBRequest>evt.target).result;
-						if (cursor) {
-							res.push( fn<T>( cursor.value ) );
-							cursor.continue();
-						} else {
-							resolve( res );
-						}
-					};
-				});	
-			});
-	}
-
-	/**
-	 * @description fetches a single object from the database using indexed property
-	 * @param stores {string|Array<string>} store name(s) from which our query needs to span.
-	 * @param store {string} name of the object store we need to read from
-	 * @param params {GetParams<T>} parameters that narrows down our matches. Particaulary,
-	 * 	you may need to define `index` and `values` parameters.
-	 * @return {Promise<T>} a promise of `T` object item from the database. 
-	 */
-	getObjectByIndex<T>(stores: string|Array<string>,
-		store: string, params: GetParams<T>): Promise<T> {
-
-		if (_.isUndefined(params.index)) {
-			return Promise.reject( Error( "getOneByIndex() needs name of the index!" ));
-		}
-
-		if (_.isUndefined(params.values)) {
-			return Promise.reject( Error("getOneByIndex() needs at least one value.") );
-		}
-
-		// used to cast
-		const fn = params.castOp || cast;
-		
-
-		return this.getTransaction(stores).then(trans => {
-			const req = trans.objectStore(store).index(params.index).get(params.values);
-			return new Promise<T>((resolve, reject) => {
-				req.onerror = (errorEvt) => {
-					reject(errorEvt);
+			const res: T[] = [];
+			return new Promise<Array<T>>((resolve, reject) => {
+				cursorReq.onerror = (errorEvt) => { reject(errorEvt) };
+				cursorReq.onsuccess = (evt) => {
+					let cursor: IDBCursorWithValue = (<IDBRequest>evt.target).result;
+					if (cursor) {
+						res.push( fn<T>( cursor.value ) );
+						cursor.continue();
+					} else {
+						resolve( res );
+					}
 				};
-				req.onsuccess = (evt) => {
-					resolve(fn<T>((<IDBRequest>evt.target).result));
-				}
-			});
+			});	
 		});
 	}
 
 	/**
-	 * @description fetches all records from the database matching the index's value.
-	 * @param stores {string|Array<string>} the store object(s) of which our search operation will span.
-	 * @param store {string} name of the object store we need to particulary search from
-	 * @param params {GetParams<T>} parameters that narrows down matches. Specifically, you may
-	 * need to define `index` parameter.
-	 * @return {Promise<Array<T>>} a promise of  an array of`<T>` object items from the database.
+	 * @description get all indexed objects using an index.
+	 * @param stores {string|string[]} store or name of the store where the operation should span
+	 * @param store {string} name of the store we'are going to fetch the items
+	 * @param range {string|number|Date|IDKeyRange|IDBArrayKey} value of the index/indecies
+	 * @param reverse {boolean} if true, the objects will be fetched in reverse order.
+	 *	default is false.
+	 * @param _cast {Function} the casting operation for the items
+	 * @return {Promise<T[]>} the promise that will resolve with result, of fail should anything goes wrong.
 	 */
-	getObjectsByIndex<T>(stores: string|Array<string>,
-		store: string, params: GetParams<T>): Promise<Array<T>> {
+	getObjectsByIndex<T>(stores: string|string[], 
+		store: string, index: string, range?: string|number|Date|IDBKeyRange|IDBArrayKey,
+		reverse: boolean=false, _cast?:(...params: any[]) => T ): Promise<T[]> {
+		const fn = _cast || cast;
+		return this.getTransaction(stores).then( trans => {
+			
+			const _index_ = trans.objectStore(store).index(index).openCursor(range, reverse ? "prev" : undefined);
+			const res: T[] = [];
+			return new Promise<T[]>((resolve, reject) => {
 
-		if (_.isEmpty(params.index)) {
-			return Promise.reject( "getAllByIndex<T>() needs at least one index!" );
-		}
-
-		const fn = params.castOp || cast;
-		return this.getTransaction(stores).then(trans => {
-			const cursorReq = trans.objectStore(store)
-				.index(params.index).openCursor(params.values, params.reverse ? "prev": null);
-			return new Promise<Array<T>>((resolve, reject) => {
-				cursorReq.onerror = (errorEvt) => {
-					reject(errorEvt);
-				};
-				const ret: T[] = [];
-				cursorReq.onsuccess = (evt) => {
-					const cursorWithValue: IDBCursorWithValue = (<IDBRequest>evt.target).result;
-					if( cursorWithValue ) {
-						ret.push( fn<T>( cursorWithValue.value ));
-						cursorWithValue.continue();
+				trans.onerror    = (evt) => { console.error(evt); reject(evt); };
+				_index_.onsuccess = (evt) => {
+					let cursor: IDBCursorWithValue = (<IDBRequest>evt.currentTarget).result;
+					if (cursor) {
+						res.push(fn<T>(cursor.value));
+						cursor.continue();
 					} else {
-						resolve(ret);
+						resolve(res);
 					}
-				};
+				}; 
+
 			});
 		});
 	}
@@ -321,15 +300,16 @@ export class IDBService {
 	 * @param keyRage {IDBKeyRange} the key constraint of the object in the store we need to delete.
 	 * @return {Promise<any>} a promise that may enventually resolve or fail upon completion.
 	 */
-	removeObjectsByIndex(stores: string|Array<string>,
-			store: string, keyRange: IDBKeyRange
+	removeObjectsByKey(stores: string|Array<string>,
+			store: string, range: IDBKeyRange
 	): Promise<any> {
 		return this.getTransaction(stores, 'readwrite').then(trans => {
-			const objectStore = trans.objectStore(store).delete( keyRange );
+			const objectStore = trans.objectStore(store).delete( range );
 			return new Promise((resolve, reject) => {
 				trans.onerror = (errorEvt) => {
 					reject(errorEvt);
 				};
+
 				trans.oncomplete = (evt) => {
 					resolve();
 				};
@@ -366,7 +346,7 @@ export class IDBService {
 				trans.objectStore(store).delete(key)
 					.onsuccess = (evt) => {
 						trans.objectStore(store)
-							.add(value, key)
+							.add(value)
 							.onsuccess = (evt2) => {/*stub*/};
 				};
 			}) as Promise<T>;
@@ -383,7 +363,7 @@ export class IDBService {
 	 * @param stores {string} name of the store where the value is stored.
 	 * @param params {PutParams<T>} options that allows us to target the stored value
 	 * 	we need to update.
-	 * @param index {string|number|Date|IDBKeyRange} the index we're using to match 
+	 * @param index {string} the index we're using to match 
 	 *	the values in the store. 
 	 * @param allMatches {boolean} if set to true, all the matching records for the given
 	 * 	property value will be updated. Default is false.
@@ -391,7 +371,10 @@ export class IDBService {
 	 * 	the new updated stored values or fail with an error
 	 */
 	updateObjectsByIndex<T>(store: string,
-		index: string|number|Date|IDBKeyRange , params: PutParams<any>[], allMatches: boolean = false): Promise<T[]> {
+		index: string , indexVal: string|number|Date|IDBKeyRange|IDBArrayKey,
+		params: PutParams<any>[],
+		allMatches: boolean = false
+	): Promise<T[]> {
 		// make sure client code hasn't forgotten to pass name and value
 		if (params.length === 0)  {return Promise.reject(Error("updateByIndex() needs at least one PutParams"));}
 		if (_.isUndefined(index)) {return Promise.reject(Error('updateByProperty() needs index of the value!'));}
@@ -403,17 +386,17 @@ export class IDBService {
 			
 			const promiseA = new Promise((resolve, reject) => {
 
-				const updateOne = (oldValue: T) => {
+				const updateOne = (oldValue: T): Promise<T> => {
 					params.forEach(param => {
 						oldValue[param.name] = param.value;
 					});
 					const req = objectStore.put(oldValue);
 					return new Promise((f, g) => {
 						req.onsuccess = (evt) => {
-							resolve(oldValue);
+							f(oldValue);
 						};
 						req.onerror = (evt) => {
-							reject(evt);
+							g(evt);
 						};
 					});
 				};
@@ -421,7 +404,7 @@ export class IDBService {
 				// should we update all matches or just one match?
 				if (allMatches) {
 					const promises: Promise<T>[] = [];
-					objectStore.openCursor(index).onsuccess = (evt) => {
+					objectStore.index(index).openCursor(indexVal).onsuccess = (evt) => {
 						const cursor: IDBCursorWithValue = (<IDBRequest>evt.target).result;
 						if (cursor) {
 							// reject immediately when we get an error
@@ -431,19 +414,21 @@ export class IDBService {
 						}
 					};
 				} else {
-					objectStore.get(index).onsuccess = (evt) => {
-						const oldValue: T = (<IDBRequest>evt.target).result;
-						updateOne(oldValue).then(newValue => resolve([newValue]));
+					objectStore.index(index).get(indexVal).onsuccess = (evt) => {
+						const value: T = (<IDBRequest>evt.currentTarget).result;
+						updateOne(value).then( newValue => resolve(newValue));
 					};
 				}
 
-			}) as Promise<T[]>;
+			})
 
 			const promiseB = new Promise((resolve, reject) => {
 				trans.oncomplete = (evt) => { resolve() };
 			});
 
-			return Promise.all([promiseA, promiseB]).then((values) => values[0] as T[]);
+			return Promise.all([promiseA, promiseB]).then((values) => {
+				return [values[0]] as T[];
+			});
 
 		});
 	}

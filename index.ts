@@ -1,2 +1,2 @@
-export * from './idb.service';
-export {IDBModule} from './idb.module';
+export * from './src/idb.service';
+export {IDBModule} from './src/idb.module';
