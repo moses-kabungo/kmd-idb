@@ -221,7 +221,7 @@ Following are the configuration parameters expected by the module.
 |`database`(required)|`string`|Name of the database that will be used by your application.|
 |`version`(required)|`unsigned long long`|Version of the current database schema. If you increment this number, the database schema will upgraded by invoking the `onUpgradeNeeded` shown below.|
 |`onUpgradeNeeded`(required)|`(IDBDatabase)=>IDBDdatabase`|The callback function that is invoked when an upgrade is needed, specifically because the version number has been increased or when the database is created for the first time.
-|`onVersionChange`(optional)|`(IDBDatabase)=>IDBDatabase`|The callback to execute when the structure of the database is altered, either when an upgrade is needed or when the database is destroyed.|
+|`onVersionChange`(optional)|`(IDBDatabase)=>boolean`|The callback to execute when the structure of the database is altered, either when an upgrade is needed or when the database is destroyed. When you return false in the callback, the `onUpgradeNeeded` will never get executed.|
 |`onBlocked`(optional)|`()=>void`|When your web app changes in such a way that a version change is required for your database, you need to consider what happens if the user has the old version of your app open in one tab and then loads the new version of your app in another. When you specify schema changes with a greater version than the actual version of the database, all other open databases must explicitly acknowledge the request before you can start making changes to the database (an onblocked event is fired until they are closed or reloaded).|
 
 ### LICENSE
