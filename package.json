@@ -19,6 +19,7 @@
   ],
   "author": "Moses Kabungo <kbng.moses@gmail.com>",
   "license": "MIT",
+  "repository": "https://github.com/kbngmoses/kmd-idb/tree/master",
   "dependencies": {
     "@angular/core": "^2.4.1",
     "@angular/common": "~2.4.1",
