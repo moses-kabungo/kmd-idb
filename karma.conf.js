@@ -15,8 +15,7 @@ module.exports = function(config) {
     plugins: [
       require('karma-jasmine'),
       require('karma-chrome-launcher'),
-      require('karma-jasmine-html-reporter'),
-      require('karma-firefox-launcher')
+      require('karma-jasmine-html-reporter')
     ],
 
     client: {
@@ -59,9 +58,6 @@ module.exports = function(config) {
       { pattern: 'node_modules/@angular/**/*.js', included: false, watched: false },
       { pattern: 'node_modules/@angular/**/*.js.map', included: false, watched: false },
 
-      { pattern: 'node_modules/lodash/**/*.js', included: false, watched: false },
-      { pattern: 'node_modules/lodash/**/*.js.map', included: false, watched: false },
-
       { pattern: 'systemjs.config.js', included: false, watched: false },
       { pattern: 'systemjs.config.extras.js', included: false, watched: false },
       'karma-test-shim.js', // optionally extend SystemJS mapping e.g., with barrels
@@ -97,7 +93,7 @@ module.exports = function(config) {
     colors: true,
     logLevel: config.LOG_INFO,
     autoWatch: true,
-    browsers: ['Firefox'],
+    browsers: ['Chrome'],
     singleRun: false
   })
 }

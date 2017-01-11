@@ -47,7 +47,7 @@ const idbConfigs: IDBServiceConfig = {
     * everytime you use a higher version number than the previous one or
     * when the database is created for the first time.
     */
-   onupgradeneeded: (db: IDBDatabase /*concise*/) => {
+   onUpgradeNeeded: (db: IDBDatabase /*concise*/) => {
       // give name to your object store e.g
       // const store = db.createObjectStore('customers', {keyPath: 'email'});
       

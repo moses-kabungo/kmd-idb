@@ -20,7 +20,6 @@
       '@angular/platform-browser': 'npm:@angular/platform-browser/bundles/platform-browser.umd.js',
       '@angular/platform-browser-dynamic': 'npm:@angular/platform-browser-dynamic/bundles/platform-browser-dynamic.umd.js',
 
-      'lodash': 'npm:lodash/lodash.js',
       'rxjs':   'npm:rxjs'
     },
 
@@ -29,9 +28,6 @@
         defaultExtension: 'js'
       },
       rxjs: {
-        defaultExtension: 'js'
-      },
-      lodash: {
         defaultExtension: 'js'
       }
     }

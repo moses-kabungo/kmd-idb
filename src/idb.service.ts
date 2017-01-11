@@ -368,7 +368,17 @@ export class IDBService {
 
 				const updateOne = (oldValue: T): Promise<T> => {
 					params.forEach(param => {
-						oldValue[param.name] = param.value;
+					    if (!oldValue.hasOwnProperty(param.name)) {
+					        var config = {
+					            value: param.value,
+                                writable: true,
+                                enumerable: true,
+                                configurable: true
+                            }
+                            Object.defineProperty(oldValue, param.name, config);
+                        } else {
+                            oldValue[param.name] = param.value;
+                        }
 					});
 					const req = objectStore.put(oldValue);
 					return new Promise((f, g) => {

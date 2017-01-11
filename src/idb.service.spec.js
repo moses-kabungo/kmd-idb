@@ -154,5 +154,24 @@ describe('IDBService', function () {
             done();
         });
     });
+    it('#removeObjectsByIndex() should return a promise of keys-array of the removed indices', function (done) {
+        service.removeObjectsByIndex(['users'], 'users', 'name', 'Allen').then(function (keys) {
+            // expect(keys.length).toBeGreaterThanOrEqual(1);
+            expect(keys).toContain('alen@gmail.com');
+            done();
+        });
+    });
+    it('#countObjects() should count number of objects in a store', function (done) {
+        service.countObjects(['users'], 'users').then(function (count) {
+            expect(count).toBe(2, 'Number of items after delete operations');
+            done();
+        });
+    });
+    it('#countObjectsByIndex() should count number of objects in a store using index', function (done) {
+        service.countObjectsByIndex(['users'], 'users', 'name', 'Solo').then(function (count) {
+            expect(count).toBe(1, 'Number of items matched by index');
+            done();
+        });
+    });
 });
 //# sourceMappingURL=idb.service.spec.js.map
